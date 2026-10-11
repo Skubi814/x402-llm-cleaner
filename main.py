@@ -19,6 +19,7 @@ async def clean_page(request: Request, response: Response):
     x402_tx_header = request.headers.get("X-402-Payment-Proof")
     
     if not x402_tx_header:
+        # Oficjalne nagłówki protokołu x402 v2, których wymaga walidator Coinbase
         custom_headers = {
             "X-402-Version": "2",
             "X-402-Amount": X402_PRICE_USDC,
@@ -26,6 +27,7 @@ async def clean_page(request: Request, response: Response):
             "X-402-Network": "base",
             "X-402-Destination": MY_WALLET_ADDRESS if MY_WALLET_ADDRESS else "0x0000000000000000000000000000000000000000"
         }
+        # Zwracamy status 402 i wymuszamy, aby te nagłówki poszły bezpośrednio w nagłówkach HTTP odpowiedzi
         return JSONResponse(
             status_code=402,
             content={"message": "Payment Required. Please pay via x402 protocol."},
