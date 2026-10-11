@@ -36,6 +36,12 @@ def get_x402_envelope() -> dict:
         ]
     }
 
+    example_output = {
+        "status": "success",
+        "title": "Example Article Title",
+        "cleaned_content_markdown": "# Title\nThis is the cleaned webpage content ready for LLM processing."
+    }
+
     return {
         "x402Version": 2,
         "error": "Payment required",
@@ -56,6 +62,19 @@ def get_x402_envelope() -> dict:
         ],
         "extensions": {
             "bazaar": {
+                "input": {
+                    "type": "http",
+                    "method": "POST",
+                    "body": {
+                        "url": "https://example.com"
+                    },
+                    "bodyType": "json"
+                },
+                "output": {
+                    "type": "json",
+                    "example": example_output,
+                    "schema": output_schema
+                },
                 "info": {
                     "input": {
                         "type": "http",
@@ -67,15 +86,14 @@ def get_x402_envelope() -> dict:
                     },
                     "output": {
                         "type": "json",
-                        "example": {
-                            "status": "success",
-                            "title": "Example Article Title",
-                            "cleaned_content_markdown": "# Title\nThis is the cleaned webpage content ready for LLM processing."
-                        },
+                        "example": example_output,
                         "schema": output_schema
                     }
                 },
-                "schema": output_schema
+                "schema": output_schema,
+                "status": "success",
+                "title": "Example Article Title",
+                "cleaned_content_markdown": "# Title\nThis is the cleaned webpage content ready for LLM processing."
             }
         }
     }
