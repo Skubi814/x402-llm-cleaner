@@ -130,3 +130,6 @@ def health_check():
         "service": "x402-llm-cleaner",
         "endpoints": ["/clean", "/analyze"]
     }
+@app.get("/ping")
+def ping():
+    return "ok"
