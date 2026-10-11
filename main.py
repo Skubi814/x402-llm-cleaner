@@ -2,13 +2,27 @@ import os
 import requests
 from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.responses import JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
 from markdownify import markdownify as md
 from readability import Document
 
 app = FastAPI(title="LLM-Friendly Text Cleaner API (x402)")
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+    expose_headers=["Payment-Required", "X-402-Version", "X-402-Amount", "X-402-Asset", "X-402-Network", "X-402-Destination"]
+)
+
 X402_PRICE_USDC = os.environ.get("X402_PRICE_USDC", "0.001")
 MY_WALLET_ADDRESS = os.environ.get("MY_WALLET_ADDRESS", "0x0000000000000000000000000000000000000000")
+
+@app.options("/clean")
+async def options_clean():
+    return Response(status_code=200)
 
 @app.get("/")
 def read_root():
