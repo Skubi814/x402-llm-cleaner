@@ -1,4 +1,6 @@
 import os
+import json
+import base64
 import requests
 from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.responses import JSONResponse
@@ -33,10 +35,19 @@ async def clean_page(request: Request, response: Response):
     x402_tx_header = request.headers.get("X-402-Payment-Proof") or request.headers.get("Payment-Proof")
     
     if not x402_tx_header:
-        payment_required_value = f"version=2, amount={X402_PRICE_USDC}, asset=USDC, network=base, destination={MY_WALLET_ADDRESS}"
+        requirements = {
+            "version": 2,
+            "amount": X402_PRICE_USDC,
+            "asset": "USDC",
+            "network": "base",
+            "destination": MY_WALLET_ADDRESS
+        }
+        
+        json_str = json.dumps(requirements)
+        base64_encoded = base64.b64encode(json_str.encode('utf-8')).decode('utf-8')
         
         custom_headers = {
-            "Payment-Required": payment_required_value,
+            "Payment-Required": base64_encoded,
             "X-402-Version": "2",
             "X-402-Amount": X402_PRICE_USDC,
             "X-402-Asset": "USDC",
@@ -49,13 +60,7 @@ async def clean_page(request: Request, response: Response):
             content={
                 "message": "Payment Required. Please pay via x402 protocol.",
                 "x402Version": 2,
-                "paymentRequirements": {
-                    "version": 2,
-                    "amount": X402_PRICE_USDC,
-                    "asset": "USDC",
-                    "network": "base",
-                    "destination": MY_WALLET_ADDRESS
-                }
+                "paymentRequirements": requirements
             },
             headers=custom_headers
         )
