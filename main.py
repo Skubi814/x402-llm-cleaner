@@ -20,6 +20,7 @@ async def clean_page(request: Request, response: Response):
     
     if not x402_tx_header:
         custom_headers = {
+            "X-402-Version": "2",
             "X-402-Amount": X402_PRICE_USDC,
             "X-402-Asset": "USDC",
             "X-402-Network": "base",
