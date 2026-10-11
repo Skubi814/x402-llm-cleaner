@@ -22,6 +22,20 @@ def get_wallet_address() -> str:
     return wallet
 
 def get_x402_envelope() -> dict:
+    output_schema = {
+        "type": "object",
+        "properties": {
+            "status": {"type": "string"},
+            "title": {"type": "string"},
+            "cleaned_content_markdown": {"type": "string"}
+        },
+        "required": [
+            "status",
+            "title",
+            "cleaned_content_markdown"
+        ]
+    }
+
     return {
         "x402Version": 2,
         "error": "Payment required",
@@ -57,22 +71,11 @@ def get_x402_envelope() -> dict:
                             "status": "success",
                             "title": "Example Article Title",
                             "cleaned_content_markdown": "# Title\nThis is the cleaned webpage content ready for LLM processing."
-                        }
+                        },
+                        "schema": output_schema
                     }
                 },
-                "schema": {
-                    "type": "object",
-                    "properties": {
-                        "status": {"type": "string"},
-                        "title": {"type": "string"},
-                        "cleaned_content_markdown": {"type": "string"}
-                    },
-                    "required": [
-                        "status",
-                        "title",
-                        "cleaned_content_markdown"
-                    ]
-                }
+                "schema": output_schema
             }
         }
     }
