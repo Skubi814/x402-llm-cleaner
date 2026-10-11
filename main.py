@@ -8,29 +8,40 @@ from readability import Document
 app = FastAPI(title="LLM-Friendly Text Cleaner API (x402)")
 
 X402_PRICE_USDC = os.environ.get("X402_PRICE_USDC", "0.001")
-MY_WALLET_ADDRESS = os.environ.get("MY_WALLET_ADDRESS")
+MY_WALLET_ADDRESS = os.environ.get("MY_WALLET_ADDRESS", "0x0000000000000000000000000000000000000000")
 
 @app.get("/")
 def read_root():
-    return {"status": "online", "message": "x402 LLM Cleaner API is running"}
+    return {"status": "online", "message": "x402 LLM Cleaner API is running", "x402Version": 2}
 
 @app.post("/clean")
 async def clean_page(request: Request, response: Response):
-    x402_tx_header = request.headers.get("X-402-Payment-Proof")
+    x402_tx_header = request.headers.get("X-402-Payment-Proof") or request.headers.get("Payment-Proof")
     
     if not x402_tx_header:
+        payment_required_value = f"version=2, amount={X402_PRICE_USDC}, asset=USDC, network=base, destination={MY_WALLET_ADDRESS}"
+        
         custom_headers = {
+            "Payment-Required": payment_required_value,
             "X-402-Version": "2",
             "X-402-Amount": X402_PRICE_USDC,
             "X-402-Asset": "USDC",
             "X-402-Network": "base",
-            "X-402-Destination": MY_WALLET_ADDRESS if MY_WALLET_ADDRESS else "0x0000000000000000000000000000000000000000"
+            "X-402-Destination": MY_WALLET_ADDRESS
         }
+        
         return JSONResponse(
             status_code=402,
             content={
                 "message": "Payment Required. Please pay via x402 protocol.",
-                "x402Version": 2
+                "x402Version": 2,
+                "paymentRequirements": {
+                    "version": 2,
+                    "amount": X402_PRICE_USDC,
+                    "asset": "USDC",
+                    "network": "base",
+                    "destination": MY_WALLET_ADDRESS
+                }
             },
             headers=custom_headers
         )
