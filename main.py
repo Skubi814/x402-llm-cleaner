@@ -2,13 +2,109 @@ import os
 import json
 import base64
 import requests
-from fastapi import FastAPI, HTTPException, Request, Response
+import httpx
+from bs4 import BeautifulSoup
+from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
-from markdownify import markdownify as md
-from readability import Document
+from pydantic import BaseModel
 
-app = FastAPI(title="LLM-Friendly Text Cleaner API (x402)")
+app = FastAPI(title="LLM Web Cleaner x402")
+
+CDP_FACILITATOR_URL = "https://api.cdp.coinbase.com/platform/v2/x402/facilitator"
+ENDPOINT_URL = "https://x402-llm-cleaner.onrender.com/clean"
+USDC_BASE_ADDRESS = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
+
+def get_wallet_address() -> str:
+    wallet = os.environ.get("MY_WALLET_ADDRESS")
+    if not wallet:
+        raise RuntimeError("Missing MY_WALLET_ADDRESS environment variable")
+    return wallet
+
+def get_x402_envelope() -> dict:
+    return {
+        "x402Version": 2,
+        "error": "Payment required",
+        "resource": {
+            "url": ENDPOINT_URL,
+            "description": "Extracts core article text from any webpage URL, removes ads and HTML boilerplate, and returns clean Markdown format.\n",
+            "mimeType": "application/json"
+        },
+        "accepts": [
+            {
+                "scheme": "exact",
+                "network": "eip155:8453",
+                "amount": "1000",
+                "asset": USDC_BASE_ADDRESS,
+                "payTo": get_wallet_address(),
+                "maxTimeoutSeconds": 300
+            }
+        ],
+        "extensions": {
+            "bazaar": {
+                "info": {
+                    "input": {
+                        "type": "http",
+                        "method": "POST",
+                        "body": {
+                            "url": "https://example.com"
+                        },
+                        "bodyType": "json"
+                    },
+                    "output": {
+                        "type": "json",
+                        "example": {
+                            "status": "success",
+                            "title": "Example Article Title",
+                            "cleaned_content_markdown": "# Title\nThis is the cleaned webpage content ready for LLM processing."
+                        }
+                    }
+                },
+                "schema": {
+                    "type": "object",
+                    "properties": {
+                        "status": {"type": "string"},
+                        "title": {"type": "string"},
+                        "cleaned_content_markdown": {"type": "string"}
+                    },
+                    "required": [
+                        "status",
+                        "title",
+                        "cleaned_content_markdown"
+                    ]
+                }
+            }
+        }
+    }
+
+def create_402_response() -> JSONResponse:
+    envelope = get_x402_envelope()
+    encoded = base64.b64encode(json.dumps(envelope).encode("utf-8")).decode("utf-8")
+    return JSONResponse(
+        status_code=status.HTTP_402_PAYMENT_REQUIRED,
+        content={"error": "Payment required"},
+        headers={
+            "payment-required": encoded,
+            "Access-Control-Expose-Headers": "payment-required"
+        }
+    )
+
+async def verify_payment(payment_sig: str) -> bool:
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.post(
+                f"{CDP_FACILITATOR_URL}/settle",
+                json={
+                    "payment": payment_sig,
+                    "resource": ENDPOINT_URL,
+                    "network": "eip155:8453",
+                    "amount": "1000",
+                    "payTo": get_wallet_address()
+                }
+            )
+            return resp.status_code == 200
+    except Exception:
+        return False
 
 app.add_middleware(
     CORSMiddleware,
@@ -16,79 +112,57 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
-    expose_headers=["Payment-Required", "X-402-Version", "X-402-Amount", "X-402-Asset", "X-402-Network", "X-402-Destination"]
+    expose_headers=["payment-required"],
 )
 
-X402_PRICE_USDC = os.environ.get("X402_PRICE_USDC", "0.001")
-MY_WALLET_ADDRESS = os.environ.get("MY_WALLET_ADDRESS", "0x0000000000000000000000000000000000000000")
+@app.middleware("http")
+async def x402_middleware(request: Request, call_next):
+    if request.url.path.rstrip("/") == "/clean" and request.method == "POST":
+        payment_token = request.headers.get("payment-signature") or request.headers.get("authorization")
 
-@app.options("/clean")
-async def options_clean():
-    return Response(status_code=200)
+        if not payment_token:
+            return create_402_response()
+
+        is_valid = await verify_payment(payment_token)
+        if not is_valid:
+            return create_402_response()
+
+    return await call_next(request)
+
+class CleanRequest(BaseModel):
+    url: str
+
+class CleanResponse(BaseModel):
+    status: str
+    title: str
+    cleaned_content_markdown: str
+
+@app.post("/clean", response_model=CleanResponse)
+def clean_page(payload: CleanRequest):
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    }
+    resp = requests.get(payload.url, headers=headers, timeout=10)
+    resp.raise_for_status()
+
+    soup = BeautifulSoup(resp.text, "html.parser")
+
+    for tag in soup(["script", "style", "nav", "footer", "header", "aside", "noscript", "svg"]):
+        tag.decompose()
+
+    title = soup.title.string.strip() if soup.title and soup.title.string else "Untitled Page"
+    main_content = soup.find("article") or soup.find("main") or soup.body
+    text = main_content.get_text(separator="\n", strip=True) if main_content else ""
+
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    cleaned_md = f"# {title}\n\n" + "\n\n".join(lines[:100])
+
+    return CleanResponse(
+        status="success",
+        title=title,
+        cleaned_content_markdown=cleaned_md
+    )
 
 @app.get("/")
-def read_root():
-    return {"status": "online", "message": "x402 LLM Cleaner API is running", "x402Version": 2}
-
-@app.post("/clean")
-async def clean_page(request: Request, response: Response):
-    x402_tx_header = request.headers.get("X-402-Payment-Proof") or request.headers.get("Payment-Proof")
-    
-    if not x402_tx_header:
-        requirements = {
-            "version": 2,
-            "amount": X402_PRICE_USDC,
-            "asset": "USDC",
-            "network": "base",
-            "destination": MY_WALLET_ADDRESS
-        }
-        
-        json_str = json.dumps(requirements)
-        base64_encoded = base64.b64encode(json_str.encode('utf-8')).decode('utf-8')
-        
-        custom_headers = {
-            "Payment-Required": base64_encoded,
-            "X-402-Version": "2",
-            "X-402-Amount": X402_PRICE_USDC,
-            "X-402-Asset": "USDC",
-            "X-402-Network": "base",
-            "X-402-Destination": MY_WALLET_ADDRESS
-        }
-        
-        return JSONResponse(
-            status_code=402,
-            content={
-                "message": "Payment Required. Please pay via x402 protocol.",
-                "x402Version": 2,
-                "paymentRequirements": requirements
-            },
-            headers=custom_headers
-        )
-
-    try:
-        body = await request.json()
-        url_to_clean = body.get("url")
-    except Exception:
-        raise HTTPException(status_code=400, detail="Invalid JSON body.")
-    
-    if not url_to_clean:
-        raise HTTPException(status_code=400, detail="Missing 'url' parameter in JSON body.")
-
-    try:
-        html_response = requests.get(url_to_clean, timeout=10, headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"})
-        html_content = html_response.text
-
-        doc = Document(html_content)
-        clean_html = doc.summary()
-        title = doc.title()
-
-        markdown_text = md(clean_html, strip=['a', 'img'])
-
-        return {
-            "status": "success",
-            "title": title,
-            "cleaned_content_markdown": markdown_text.strip()
-        }
-
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error processing the webpage: {str(e)}")
+def health_check():
+    return {"status": "ok", "service": "x402-llm-cleaner"}
