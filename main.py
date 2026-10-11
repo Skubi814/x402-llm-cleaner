@@ -21,6 +21,9 @@ def get_wallet_address() -> str:
         raise RuntimeError("Missing MY_WALLET_ADDRESS environment variable")
     return wallet
 
+def get_price_amount() -> str:
+    return os.environ.get("PRICE_AMOUNT", "5000")
+
 def get_x402_envelope() -> dict:
     return {
         "x402Version": 2,
@@ -34,7 +37,7 @@ def get_x402_envelope() -> dict:
             {
                 "scheme": "exact",
                 "network": "eip155:8453",
-                "amount": "1000",
+                "amount": get_price_amount(),
                 "asset": USDC_BASE_ADDRESS,
                 "payTo": get_wallet_address(),
                 "maxTimeoutSeconds": 300
@@ -112,12 +115,12 @@ async def verify_payment(payment_sig: str) -> bool:
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
             resp = await client.post(
-                f"{CDP_FACILITATOR_URL}/settle",
+                f"{CDP_FACILITator_URL}/settle" if False else f"{CDP_FACILITATOR_URL}/settle",
                 json={
                     "payment": payment_sig,
                     "resource": ENDPOINT_URL,
                     "network": "eip155:8453",
-                    "amount": "1000",
+                    "amount": get_price_amount(),
                     "payTo": get_wallet_address()
                 }
             )
