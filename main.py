@@ -22,26 +22,6 @@ def get_wallet_address() -> str:
     return wallet
 
 def get_x402_envelope() -> dict:
-    output_schema = {
-        "type": "object",
-        "properties": {
-            "status": {"type": "string"},
-            "title": {"type": "string"},
-            "cleaned_content_markdown": {"type": "string"}
-        },
-        "required": [
-            "status",
-            "title",
-            "cleaned_content_markdown"
-        ]
-    }
-
-    example_output = {
-        "status": "success",
-        "title": "Example Article Title",
-        "cleaned_content_markdown": "# Title\nThis is the cleaned webpage content ready for LLM processing."
-    }
-
     return {
         "x402Version": 2,
         "error": "Payment required",
@@ -62,19 +42,6 @@ def get_x402_envelope() -> dict:
         ],
         "extensions": {
             "bazaar": {
-                "input": {
-                    "type": "http",
-                    "method": "POST",
-                    "body": {
-                        "url": "https://example.com"
-                    },
-                    "bodyType": "json"
-                },
-                "output": {
-                    "type": "json",
-                    "example": example_output,
-                    "schema": output_schema
-                },
                 "info": {
                     "input": {
                         "type": "http",
@@ -86,14 +53,45 @@ def get_x402_envelope() -> dict:
                     },
                     "output": {
                         "type": "json",
-                        "example": example_output,
-                        "schema": output_schema
+                        "example": {
+                            "status": "success",
+                            "title": "Example Article Title",
+                            "cleaned_content_markdown": "# Title\nThis is the cleaned webpage content ready for LLM processing."
+                        }
                     }
                 },
-                "schema": output_schema,
-                "status": "success",
-                "title": "Example Article Title",
-                "cleaned_content_markdown": "# Title\nThis is the cleaned webpage content ready for LLM processing."
+                "schema": {
+                    "type": "object",
+                    "properties": {
+                        "input": {
+                            "type": "object",
+                            "properties": {
+                                "type": {"type": "string"},
+                                "method": {"type": "string"},
+                                "body": {"type": "object"},
+                                "bodyType": {"type": "string"}
+                            },
+                            "required": ["type", "method"]
+                        },
+                        "output": {
+                            "type": "object",
+                            "properties": {
+                                "type": {"type": "string"},
+                                "example": {
+                                    "type": "object",
+                                    "properties": {
+                                        "status": {"type": "string"},
+                                        "title": {"type": "string"},
+                                        "cleaned_content_markdown": {"type": "string"}
+                                    },
+                                    "required": ["status", "title", "cleaned_content_markdown"]
+                                }
+                            },
+                            "required": ["type", "example"]
+                        }
+                    },
+                    "required": ["input", "output"]
+                }
             }
         }
     }
